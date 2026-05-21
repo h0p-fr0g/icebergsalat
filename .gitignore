@@ -1,0 +1,11 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PLY generated files
+parsetab.py
+parser.out
+
+# IDE
+.vscode/
