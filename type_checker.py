@@ -1,43 +1,135 @@
-def check_type(node, env=None):
-    if env is None:
-        env = {}
-    
+# =============================================================================
+# --- TYPE CHECKER ---
+# =============================================================================
+
+def check_statement(node, env): 
     kind = node[0]
 
-    if kind == 'num':    return 'NUM'
-    if kind == 'bool':   return 'BOOL'
-    
-    if kind == 'id':
-        var_name = node[1]
-        if var_name in env:
-            return env[var_name]
-        raise TypeError(f"Variable '{var_name}' is not declared!")
-    
+    # --- DECLARATION ---
     if kind == 'assign_decl':
         var_name, var_type_str, expr_node = node[1], node[2], node[3]
-        type_expr = check_type(expr_node, env)
+        type_expr = check_expression(expr_node, env)
         expected_type = 'NUM' if var_type_str == 'int' else 'BOOL'
         
         if type_expr != expected_type:
             raise TypeError(f"Typeconflict at declaration of '{var_name}': Expected {expected_type}, received {type_expr}")
         
-        env[var_name] = expected_type
+        env['vars'][var_name] = expected_type
         return 'VOID'
 
+    # --- ASSIGNMENT ---
     if kind == 'assign':
         var_name, expr_node = node[1], node[2]
-        if var_name not in env:
+        if var_name not in env['vars']:
             raise TypeError(f"Variable '{var_name}' needs to be declared before assignment")
         
-        type_expr = check_type(expr_node, env)
-        if type_expr != env[var_name]:
-            raise TypeError(f"Typeconflict at assignment of '{var_name}': Can't save {type_expr} into {env[var_name]}")
+        type_expr = check_expression(expr_node, env)
+        if type_expr != env['vars'][var_name]:
+            raise TypeError(f"Typeconflict at assignment of '{var_name}': Can't save {type_expr} into {env['vars'][var_name]}")
         return 'VOID'
 
+    # --- FUNCTION DEFINITION ---
+    if kind == 'function_def':
+        func_name, ret_type_str, params, body = node[1], node[2], node[3], node[4]
+        expected_ret_type = 'NUM' if ret_type_str == 'int' else 'BOOL'
+        
+        param_types = []
+        for p_name, p_type_str in params:
+            param_types.append('NUM' if p_type_str == 'int' else 'BOOL')
+            
+        env['funcs'][func_name] = (param_types, expected_ret_type)
+        
+        local_env = {
+            'vars': env['vars'].copy(),  
+            'funcs': env['funcs'],       
+            'current_return': expected_ret_type 
+        }
+        
+        for (p_name, _), p_type in zip(params, param_types):
+            local_env['vars'][p_name] = p_type
+            
+        has_return = False
+        for stmt in body:
+            check_statement(stmt, local_env)
+            if stmt[0] == 'return':
+                has_return = True
+                
+        if not has_return:
+            raise TypeError(f"Function '{func_name}' expects to return {expected_ret_type} but has no RETURN statement.")
+            
+        return 'VOID'
+
+    # --- RETURN STATEMENT ---
+    if kind == 'return':
+        expr_node = node[1]
+        type_expr = check_expression(expr_node, env)
+        
+        if env['current_return'] is None:
+            raise TypeError("RETURN is only allowed inside a function!")
+            
+        if type_expr != env['current_return']:
+            raise TypeError(f"Return type conflict: Expected {env['current_return']}, received {type_expr}")
+            
+        return 'VOID'
+
+    # --- IF / WHILE STATEMENTS ---
+    if kind in ['if_stmt', 'while_stmt']:
+        cond_node, stmt_list = node[1], node[2]
+        type_cond = check_expression(cond_node, env)
+        if type_cond != 'BOOL':
+            raise TypeError(f"Condition for IF/WHILE expects BOOL, received {type_cond}")
+        
+        for stmt in stmt_list:
+            check_statement(stmt, env)
+        return 'VOID'
+
+    # --- LOOP CONTROLS ---
+    if kind in ['break', 'continue']:
+        return 'VOID'
+    
+    # --- FALLBACK ---
+    check_expression(node, env)
+    return 'VOID'
+
+
+def check_expression(node, env):
+    kind = node[0]
+
+    # --- LITERALS ---
+    if kind == 'num':    return 'NUM'
+    if kind == 'bool':   return 'BOOL'
+    
+    # --- VARIABLES ---
+    if kind == 'id':
+        var_name = node[1]
+        if var_name in env['vars']:
+            return env['vars'][var_name]
+        raise TypeError(f"Variable '{var_name}' is not declared in this scope!")
+
+    # --- FUNCTION CALL ---
+    if kind == 'function_call':
+        func_name, args = node[1], node[2]
+        
+        if func_name not in env['funcs']:
+            raise TypeError(f"Function '{func_name}' is not defined!")
+            
+        expected_param_types, return_type = env['funcs'][func_name]
+        
+        if len(args) != len(expected_param_types):
+            raise TypeError(f"Function '{func_name}' expected {len(expected_param_types)} arguments, received {len(args)}")
+            
+        for i, arg_node in enumerate(args):
+            arg_type = check_expression(arg_node, env)
+            if arg_type != expected_param_types[i]:
+                raise TypeError(f"Function '{func_name}' argument {i+1}: Expected {expected_param_types[i]}, received {arg_type}")
+                
+        return return_type
+
+    # --- BINARY OPERATORS ---
     if kind == 'binop':
         op, left, right = node[1], node[2], node[3]
-        type_left = check_type(left, env)
-        type_right = check_type(right, env)
+        type_left = check_expression(left, env)
+        type_right = check_expression(right, env)
 
         if op in ['PLUS', 'MINUS', 'TIMES', 'DIVIDE', 'MODULO', 'POWER']:
             if type_left == 'NUM' and type_right == 'NUM':
@@ -54,33 +146,32 @@ def check_type(node, env=None):
                 return 'BOOL'
             raise TypeError(f"Logic '{op}' expected BOOL BOOL, received {type_left} {type_right}")
 
-    elif kind == 'not':
-        type_expr = check_type(node[1], env)
+    # --- UNARY OPERATOR ---
+    if kind == 'not':
+        type_expr = check_expression(node[1], env)
         if type_expr == 'BOOL':
             return 'BOOL'
         raise TypeError(f"'!' expected BOOL, received {type_expr}")
 
-    elif kind == 'if':
-        type_cond = check_type(node[1], env)
-        type_then = check_type(node[2], env)
-        type_else = check_type(node[3], env)
+    # --- SHORTHAND IF (TERNARY EXPRESSION) ---
+    if kind == 'if':
+        type_cond = check_expression(node[1], env)
+        type_then = check_expression(node[2], env)
+        type_else = check_expression(node[3], env)
         if type_cond != 'BOOL':
             raise TypeError(f"Condition '?' expects BOOL, received {type_cond}")
         if type_then != type_else:
             raise TypeError(f"Branches of '?' incompatible: {type_then} vs {type_else}")
         return type_then
-    
-    elif kind == 'if_stmt' or kind == 'while_stmt':
-        cond_node, stmt_list = node[1], node[2]
-        type_cond = check_type(cond_node, env)
-        if type_cond != 'BOOL':
-            raise TypeError(f"Condition for IF/WHILE expects BOOL, received {type_cond}")
-        
-        for stmt in stmt_list:
-            check_type(stmt, env)
-        return 'VOID'
 
-    elif kind in ['break', 'continue']:
-        return 'VOID'
+    raise ValueError(f"Invalid Expression Node: {kind}")
 
-    raise ValueError(f"Unknown Node: {kind}")
+
+def check_type(node, env=None):
+    if env is None:
+        env = {
+            'vars': {},
+            'funcs': {},
+            'current_return': None
+        }
+    return check_statement(node, env)

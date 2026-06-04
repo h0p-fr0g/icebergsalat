@@ -6,25 +6,41 @@ from lexer import tokens
 start = 'program'
 module = sys.modules[__name__]
 
+
 def p_program(p):
-    '''program : optional_newlines statement_list optional_newlines
-               | optional_newlines'''
+    '''program : separator_list statement_list separator_list
+               | statement_list
+               | separator_list
+               | empty'''
     if len(p) == 4:
         p[0] = p[2]
+    elif len(p) == 2 and p[1] is not None:
+        p[0] = p[1]
     else:
         p[0] = []
 
 def p_statement_list_multiple(p):
-    '''statement_list : statement_list statement_terminator statement
-                      | statement_list statement'''
-    if len(p) == 4:
+    'statement_list : statement_list separator_list statement'
+    if p[3] is not None:
         p[0] = p[1] + [p[3]]
     else:
-        p[0] = p[1] + [p[2]]
+        p[0] = p[1]
 
 def p_statement_list_single(p):
     'statement_list : statement'
-    p[0] = [p[1]]
+    if p[1] is None:
+        p[0] = []
+    else:
+        p[0] = [p[1]]
+
+def p_separator_list_multiple(p):
+    'separator_list : separator_list LINEBREAK'
+    p[0] = None
+
+def p_separator_list_single(p):
+    'separator_list : LINEBREAK'
+    p[0] = None
+
 
 def p_statement_exp(p):
     'statement : expression'
@@ -39,11 +55,11 @@ def p_statement_reassign(p):
     p[0] = ('assign', p[2], p[1])
 
 def p_statement_if(p):
-    'statement : expression IF LINEBREAK INDENT statement_list DEDENT'
+    'statement : expression IF separator_list INDENT statement_list DEDENT'
     p[0] = ('if_stmt', p[1], p[5])
 
 def p_statement_while(p):
-    'statement : expression WHILE LINEBREAK INDENT statement_list DEDENT'
+    'statement : expression WHILE separator_list INDENT statement_list DEDENT'
     p[0] = ('while_stmt', p[1], p[5])
 
 def p_statement_break(p):
@@ -54,18 +70,23 @@ def p_statement_continue(p):
     'statement : CONTINUE'
     p[0] = ('continue',)
 
-def p_statement_terminator(p):
-    'statement_terminator : LINEBREAK'
-    p[0] = None
+def p_function_definition(p):
+    '''statement : LPAREN parameterlist RPAREN ID TYPE FUNCTION separator_list INDENT statement_list DEDENT
+                 | LPAREN RPAREN ID TYPE FUNCTION separator_list INDENT statement_list DEDENT'''
+    if len(p) == 11:
+        p[0] = ('function_def', p[4], p[5], p[2], p[9])
+    else:
+        p[0] = ('function_def', p[3], p[4], [], p[8])
 
-def p_optional_newlines(p):
-    '''optional_newlines : LINEBREAK
-                         | empty'''
-    p[0] = None
+def p_return_statement(p):
+    'statement : expression RETURN'
+    p[0] = ('return', p[1])
 
 def p_empty(p):
     'empty :'
     p[0] = None
+
+
 
 def p_expression_number(p):
     'expression : NUMBER'
@@ -79,6 +100,14 @@ def p_expression_id(p):
     'expression : ID'
     p[0] = ('id', p[1])
 
+def p_function_call(p):
+    '''expression : LPAREN expressionlist RPAREN ID
+                  | LPAREN RPAREN ID'''
+    if len(p) == 5:
+        p[0] = ('function_call', p[4], p[2])
+    else:
+        p[0] = ('function_call', p[3], [])
+
 def binop(op):
     production = f'expression : expression expression {op}'
     def f(p):
@@ -89,10 +118,8 @@ def binop(op):
 binop.unique_production = (f"p_binop{i}" for i in itertools.count())
 
 for op in [
-    'PLUS', 'MINUS', 'TIMES', 'DIVIDE',
-    'MODULO', 'POWER',
-    'LE', 'GE', 'LT', 'GT', 'EQ', 'NE',
-    'AND', 'OR'
+    'PLUS', 'MINUS', 'TIMES', 'DIVIDE', 'MODULO', 'POWER',
+    'LE', 'GE', 'LT', 'GT', 'EQ', 'NE', 'AND', 'OR'
 ]:
     binop(op)
 
@@ -104,10 +131,28 @@ def p_expression_shorthand(p):
     'expression : expression expression expression SH'
     p[0] = ('if', p[1], p[2], p[3])
 
+
+def p_expressionlist(p):
+    '''expressionlist : expression COMMA expressionlist
+                      | expression'''
+    if len(p) == 4:
+        p[0] = [p[1]] + p[3]
+    else:
+        p[0] = [p[1]]
+
+def p_parameterlist(p):
+    '''parameterlist : ID TYPE COMMA parameterlist
+                     | ID TYPE'''
+    if len(p) == 5:
+        p[0] = [(p[1], p[2])] + p[4]
+    else:
+        p[0] = [(p[1], p[2])]
+
+
 def p_error(p):
     if p:
         raise SyntaxError(f"Syntax error at '{p.value}' (line {p.lineno})")    
     else:
-        raise SyntaxError(f"Syntax error at EOF")
+        raise SyntaxError(f"Syntax error EOF")
 
-parser = yacc.yacc()
+parser = yacc.yacc(debug=False, write_tables=False)

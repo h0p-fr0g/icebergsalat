@@ -1,21 +1,28 @@
 import ply.lex as lex
 
+
 tokens = (
     'ID', 'NUMBER', 'BOOLEAN',
     'PLUS', 'MINUS', 'TIMES', 'DIVIDE',
+    'LPAREN', 'RPAREN', 'COMMA',
     'MODULO', 'POWER', 'SH',
     'LE', 'GE', 'LT', 'GT', 'EQ', 'NE',
     'AND', 'OR', 'NOT',
     'ASSIGN',
     'IF', 'ELSE', 'WHILE', 'BREAK', 'CONTINUE',
     'TYPE', 
-    'LINEBREAK', 'INDENT', 'DEDENT' 
+    'LINEBREAK', 'INDENT', 'DEDENT',
+    'FUNCTION', 'RETURN'
 )
+
 
 t_PLUS    = r'\+'
 t_MINUS   = r'-'
 t_TIMES   = r'\*'
 t_DIVIDE  = r'/'
+t_LPAREN  = r'\('
+t_RPAREN  = r'\)'
+t_COMMA   = r','
 t_MODULO  = r'%'
 t_POWER   = r'\^'
 t_SH      = r'\?'
@@ -36,8 +43,11 @@ keywords = {
     'ELSE': 'ELSE',
     'WHILE': 'WHILE',
     'break': 'BREAK',
-    'continue': 'CONTINUE'
+    'continue': 'CONTINUE',
+    'LETTUCE': 'FUNCTION',
+    'RETURN': 'RETURN'
 }
+
 
 def t_NUMBER(t):
     r'\d+~?'
@@ -61,18 +71,22 @@ def t_LINEBREAK(t):
     r'\n+[ \t]*'
     t.lexer.lineno += t.value.count('\n')
     last_newline_idx = t.value.rfind('\n')
-    spaces = t.value[last_newline_idx + 1:]
-    indent = spaces.count('\t')
+    tabs = t.value[last_newline_idx + 1:]
+    indent = tabs.count('\t')
     current = t.lexer.indent_stack[-1]
 
     if indent > current:
         t.lexer.indent_stack.append(indent)
+        t.type = 'LINEBREAK'
+        
         tok = lex.LexToken()
         tok.type = 'INDENT'
         tok.value = indent
         tok.lineno = t.lineno
         tok.lexpos = t.lexpos
         t.lexer.pending_tokens.append(tok)
+        return t
+        
     elif indent < current:
         while t.lexer.indent_stack[-1] > indent:
             t.lexer.indent_stack.pop()
@@ -82,6 +96,16 @@ def t_LINEBREAK(t):
             tok.lineno = t.lineno
             tok.lexpos = t.lexpos
             t.lexer.pending_tokens.append(tok)
+            
+        lb_tok = lex.LexToken()
+        lb_tok.type = 'LINEBREAK'
+        lb_tok.value = '\n'
+        lb_tok.lineno = t.lineno
+        lb_tok.lexpos = t.lexpos
+        t.lexer.pending_tokens.append(lb_tok)
+        
+
+        return t.lexer.pending_tokens.pop(0)
 
     t.type = 'LINEBREAK'
     return t
@@ -89,8 +113,9 @@ def t_LINEBREAK(t):
 t_ignore  = ' '
 
 def t_error(t):
-    print(f"Illegal character '{t.value[0]}'")
+    print(f"Lexer Error: Illegal character '{t.value[0]}' in line {t.lineno}")
     t.lexer.skip(1)
+
 
 def get_next_token(lexer_obj):
     if lexer_obj.pending_tokens:
@@ -98,6 +123,7 @@ def get_next_token(lexer_obj):
         
     tok = lexer_obj.original_token()
 
+    # EOF-Handling
     if not tok and len(lexer_obj.indent_stack) > 1:
         while len(lexer_obj.indent_stack) > 1:
             lexer_obj.indent_stack.pop()
@@ -115,6 +141,7 @@ def build_lexer():
     lexer_obj = lex.lex()
     lexer_obj.indent_stack = [0]
     lexer_obj.pending_tokens = []
+    
     lexer_obj.original_token = lexer_obj.token
     lexer_obj.token = lambda: get_next_token(lexer_obj)
     return lexer_obj

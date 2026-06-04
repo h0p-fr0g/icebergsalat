@@ -1,83 +1,121 @@
-import sys
-import os
+# =============================================================================
+# --- MAIN TEST SUITE ---
+# =============================================================================
+
 from lexer import build_lexer
 from parser import parser
 from type_checker import check_type
 from interpreter import eval_ast
 
-def execute_code(source_code, label="Source Code"):
-    """Runs the provided source code through all compiler pipeline stages."""
-    print(f"\n==========================================")
-    print(f"RUNNING: {label}")
-    print(f"==========================================")
-    print("Code being executed:")
-    print(source_code.strip())
-    print("------------------------------------------")
+def run_compiler_pipeline(test_name, source_code):
+    print(f"\n==================================================================")
+    print(f"RUNNING: {test_name}")
+    print(f"==================================================================")
+    print(f"Source Code:\n{source_code.strip()}\n")
     
-    # 1. Initialize Lexer
-    print("-> 1. Initializing Lexer...")
+    # 1. Lexer für diesen Durchlauf frisch initialisieren
     test_lexer = build_lexer()
     test_lexer.input(source_code.strip())
     
     try:
-        # 2. Parsing (AST generation)
-        print("-> 2. Starting Parser...")
+        # 2. Parsing (AST-Generierung)
         ast = parser.parse(lexer=test_lexer)
-        if ast is None:
-            print("❌ Error: The parser returned no result (AST is None).")
-            return
-        print("   [Generated AST]:", ast)
-        print("   Parser: Success! AST generated. ✅")
+        print("-> 1. Parser: Success! AST successfully generated. 🌳")
         
-        # 3. Type Checking (Static Type Analysis)
-        print("-> 3. Starting Type Checker...")
-        symbol_table = {}
+        # 3. Statische Typ-Prüfung
+        type_env = {
+            'vars': {},
+            'funcs': {},
+            'current_return': None
+        }
         for statement in ast:
-            check_type(statement, symbol_table)
-        print("   Type Checker: Success! No type errors found. ✅")
+            check_type(statement, type_env)
+        print("-> 2. Type Checker: Success! All types are valid. ✅")
         
-        # 4. Execution (Interpreter Runtime)
-        print("-> 4. Starting Interpreter...")
-        runtime_env = {}
+        # 4. Ausführung / Interpretation
+        runtime_env = {
+            'vars': {},
+            'funcs': {}
+        }
         for statement in ast:
             eval_ast(statement, runtime_env)
-        print("   Interpreter: Success! Code executed safely. 🎉")
-        
-        print("------------------------------------------")
-        print(f"Final Environment/Variables State: {runtime_env}")
-        print("==========================================\n")
+        print("-> 3. Interpreter: Success! Code executed flawlessly. 🎉")
+        print(f"\nFinal State of Global Variables: {runtime_env['vars']}")
         
     except SyntaxError as e:
-        print(f"\n❌ SYNTAX ERROR: {e}")
+        print(f"❌ PARSING ERROR (Expected if negative test): {e}")
     except TypeError as e:
-        print(f"\n❌ TYPE ERROR: {e}")
+        print(f"❌ TYPE ERROR (Expected if negative test): {e}")
     except Exception as e:
-        print(f"\n❌ RUNTIME ERROR: {e}")
+        print(f"❌ RUNTIME ERROR: {e}")
 
-if __name__ == '__main__':
-    print("DEBUG: main.py started!")
 
-    # Check if a file path argument was passed via command line
-    if len(sys.argv) > 1:
-        file_path = sys.argv[1]
-        if os.path.exists(file_path):
-            print(f"Reading code from file: '{file_path}'")
-            with open(file_path, 'r', encoding='utf-8') as f:
-                code_to_run = f.read()
-            execute_code(code_to_run, label=f"File Execution ({file_path})")
-        else:
-            print(f"❌ Error: File '{file_path}' not found.")
-    else:
-        # Fallback: Run the default built-in test loop case
-        print("No input file provided. Running default test suite string...")
-        default_code = '''
-1 i int =:
-100 result int =:
-i 10 < WHILE
-\ti 1 + i =:
-\ti 3 == IF
-\t\tbreak
-2 3 ^ x int =:
+if __name__ == "__main__":
+    
+    # --- TEST 1: POSITIV - Die Fakultätsfunktion (Schleife, Scopes, Mathe, Return) ---
+    code_factorial = '''
+(n int) fakultaet int LETTUCE
+	1 res int =:
+	n 1 > WHILE
+		res n * res =:
+		n 1 - n =:
+	res RETURN
+
+(5) fakultaet ergebnis int =:
 '''
+    run_compiler_pipeline("Positive Case 1: Advanced Factorial Function (5!)", code_factorial)
 
-execute_code(default_code, label="Built-in Test Suite Case")
+
+    # --- TEST 2: POSITIV - Komplexe Logik mit Shorthand IF (Ternary) und normalen Verzweigungen ---
+    code_logic = '''
+10 x int =:
+F bed bool =:
+
+x 5 > IF
+	T bed =:
+
+bed IF
+	100 y int =:
+	200 y =:
+
+T F bed ? z bool =:
+'''
+    run_compiler_pipeline("Positive Case 2: Standard IF and Shorthand Ternary Operator", code_logic)
+
+
+    # --- TEST 3: NEGATIV - Syntax-Fehler (Infix statt Postfix in der Funktion) ---
+    code_neg_syntax = '''
+(x int, y int) add int LETTUCE
+	x + y RETURN
+'''
+    run_compiler_pipeline("Negative Case 1: Infix Operator Syntax Error inside Function", code_neg_syntax)
+
+
+    # --- TEST 4: NEGATIV - Typ-Fehler (Falscher Argumenten-Typ beim Aufruf) ---
+    code_neg_type = '''
+(n int) quadrat int LETTUCE
+	n n * RETURN
+
+(T) quadrat ergebnis int =:
+'''
+    run_compiler_pipeline("Negative Case 2: Passing BOOL to INT Parameter Type Error", code_neg_type)
+
+
+    # --- TEST 5: NEGATIV - Scope-Fehler (Zugriff auf lokale Variable außerhalb der Funktion) ---
+    code_neg_scope = '''
+() scope_test int LETTUCE
+	99 geheimnis int =:
+	geheimnis RETURN
+
+() scope_test
+geheimnis x int =:
+'''
+    run_compiler_pipeline("Negative Case 3: Accessing Local Variable Outside Scope Error", code_neg_scope)
+
+
+    # --- TEST 6: NEGATIV - Return-Fehler (Globales Return ohne Funktion) ---
+    code_neg_return = '''
+5 x int =:
+x RETURN
+'''
+    run_compiler_pipeline("Negative Case 4: Global RETURN Statement Error", code_neg_return)
