@@ -2,6 +2,9 @@
 # --- INTERPRETER / EVALUATOR ---
 # =============================================================================
 
+from environment import Env  # Stelle sicher, dass der Dateiname übereinstimmt
+
+
 class BreakException(Exception): pass
 class ContinueException(Exception): pass
 
@@ -17,7 +20,22 @@ def eval_statement(node, env):
     if kind == 'assign_decl' or kind == 'assign':
         var_name = node[1]
         expr_node = node[-1]
-        env['vars'][var_name] = eval_expression(expr_node, env)
+        val = eval_expression(expr_node, env)
+        
+        if kind == 'assign_decl':
+            # Deklaration schreibt IMMER in den aktuellsten, lokalen Scope
+            env.vars[var_name] = val
+        else:
+            # Reassignment sucht über die parent-Kette, wo die Variable lebt
+            target_env = env
+            while target_env and var_name not in target_env.vars:
+                target_env = target_env.parent
+            
+            if target_env:
+                target_env.vars[var_name] = val
+            else:
+                # Fallback, falls der Typechecker etwas durchgelassen hat
+                env.vars[var_name] = val
         return None
 
     # --- IF STATEMENT ---
@@ -46,18 +64,25 @@ def eval_statement(node, env):
     if kind == 'continue':
         raise ContinueException()
 
-    # --- FUNCTION DEFINITION ---
+    # --- FUNCTION DEFINITION (CLOSURE) ---
     if kind == 'function_def':
         func_name, ret_type, params, body = node[1], node[2], node[3], node[4]
         param_names = [p_name for p_name, _ in params]
-        env['funcs'][func_name] = (param_names, body)
+        
+        # WICHTIG: Die Funktion merkt sich das aktuelle 'env' als Geburtsort-Scope!
+        env.funcs[func_name] = (param_names, body, env)
         return None
 
     # --- RETURN STATEMENT ---
     if kind == 'return':
-        val = eval_expression(node[1], env)
+        if len(node) > 1 and node[1] is not None:
+            val = eval_expression(node[1], env)
+        else:
+            val = None
+            
         raise ReturnException(val)
 
+    # --- FALLBACK ---
     eval_expression(node, env)
     return None
 
@@ -71,7 +96,11 @@ def eval_expression(node, env):
 
     # --- VARIABLES ---
     if kind == 'id':
-        return env['vars'][node[1]]
+        var_name = node[1]
+        val = env.lookup_var(var_name)
+        if val is not None:
+            return val
+        raise NameError(f"Runtime Error: Variable '{var_name}' is not defined!")
 
     # --- UNARY OPERATOR ---
     if kind == 'not':
@@ -85,6 +114,17 @@ def eval_expression(node, env):
     # --- BINARY OPERATORS ---
     if kind == 'binop':
         op, left, right = node[1], node[2], node[3]
+
+        if op == 'AND':
+                if not eval_expression(left, env): 
+                    return False
+                return eval_expression(right, env)
+                
+        if op == 'OR':
+            if eval_expression(left, env): 
+                return True
+            return eval_expression(right, env)
+
         v_left = eval_expression(left, env)
         v_right = eval_expression(right, env)
 
@@ -101,25 +141,29 @@ def eval_expression(node, env):
         if op == 'GE':      return v_left >= v_right
         if op == 'EQ':      return v_left == v_right
         if op == 'NE':      return v_left != v_right
-        
-        if op == 'AND':     return v_left and v_right
-        if op == 'OR':      return v_left or v_right
 
     # --- FUNCTION CALL ---
     if kind == 'function_call':
         func_name, args = node[1], node[2]
         
-        param_names, body = env['funcs'][func_name]
+        # Hole die Funktionsinfos aus der Scope-Hierarchie
+        func_info = env.lookup_func(func_name)
+        if not func_info:
+            raise NameError(f"Runtime Error: Function '{func_name}' is not defined!")
+            
+        # Entpacke Parameter, Body und das Geburts-Environment (Closure)
+        param_names, body, closure_env = func_info
         
+        # Argumente im AKTUELLEN aufrufenden Scope auswerten
         evaluated_args = [eval_expression(arg, env) for arg in args]
         
-        local_env = {
-            'vars': {},          
-            'funcs': env['funcs'] 
-        }
+        # NEU: Das Parent des neuen lokalen Scopes ist das closure_env (Geburtsort), 
+        # NICHT das aktuelle env (der Aufrufer)!
+        local_env = Env(parent=closure_env)
         
+        # Werte an die Parameter-Variablen binden
         for p_name, p_val in zip(param_names, evaluated_args):
-            local_env['vars'][p_name] = p_val
+            local_env.vars[p_name] = p_val
             
         try:
             for stmt in body:
@@ -134,8 +178,5 @@ def eval_expression(node, env):
 
 def eval_ast(node, env=None):
     if env is None:
-        env = {
-            'vars': {},
-            'funcs': {}
-        }
+        env = Env()  # Startet mit der leeren globalen Instanz von Env
     return eval_statement(node, env)

@@ -39,6 +39,8 @@ t_ASSIGN  = r'=:'
 
 keywords = {
     'int': 'TYPE',
+    'bool': 'TYPE',
+    'void': 'TYPE',
     'IF': 'IF',
     'ELSE': 'ELSE',
     'WHILE': 'WHILE',
@@ -114,7 +116,6 @@ t_ignore  = ' '
 
 def t_error(t):
     print(f"Lexer Error: Illegal character '{t.value[0]}' in line {t.lineno}")
-    t.lexer.skip(1)
 
 
 def get_next_token(lexer_obj):

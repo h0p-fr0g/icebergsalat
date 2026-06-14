@@ -2,6 +2,9 @@
 # --- TYPE CHECKER ---
 # =============================================================================
 
+from environment import Env
+
+
 def check_statement(node, env): 
     kind = node[0]
 
@@ -14,49 +17,49 @@ def check_statement(node, env):
         if type_expr != expected_type:
             raise TypeError(f"Typeconflict at declaration of '{var_name}': Expected {expected_type}, received {type_expr}")
         
-        env['vars'][var_name] = expected_type
+        env.vars[var_name] = expected_type
         return 'VOID'
 
     # --- ASSIGNMENT ---
     if kind == 'assign':
         var_name, expr_node = node[1], node[2]
-        if var_name not in env['vars']:
+        existing_type = env.lookup_var(var_name)
+        if not existing_type:
             raise TypeError(f"Variable '{var_name}' needs to be declared before assignment")
         
         type_expr = check_expression(expr_node, env)
-        if type_expr != env['vars'][var_name]:
-            raise TypeError(f"Typeconflict at assignment of '{var_name}': Can't save {type_expr} into {env['vars'][var_name]}")
+        if type_expr != existing_type:
+            raise TypeError(f"Typeconflict at assignment of '{var_name}': Can't save {type_expr} into {existing_type}")
         return 'VOID'
 
     # --- FUNCTION DEFINITION ---
     if kind == 'function_def':
         func_name, ret_type_str, params, body = node[1], node[2], node[3], node[4]
-        expected_ret_type = 'NUM' if ret_type_str == 'int' else 'BOOL'
+
+        if ret_type_str == 'int':       expected_ret_type = 'NUM'
+        elif ret_type_str == 'bool':    expected_ret_type = 'BOOL'
+        else:                           expected_ret_type = 'VOID'
         
         param_types = []
         for p_name, p_type_str in params:
             param_types.append('NUM' if p_type_str == 'int' else 'BOOL')
-            
-        env['funcs'][func_name] = (param_types, expected_ret_type)
-        
-        local_env = {
-            'vars': env['vars'].copy(),  
-            'funcs': env['funcs'],       
-            'current_return': expected_ret_type 
-        }
-        
+
+        env.funcs[func_name] = (param_types, expected_ret_type)
+
+        local_env = Env(parent=env) 
+        local_env.current_return = expected_ret_type
+
         for (p_name, _), p_type in zip(params, param_types):
-            local_env['vars'][p_name] = p_type
-            
+            local_env.vars[p_name] = p_type
+
         has_return = False
         for stmt in body:
             check_statement(stmt, local_env)
             if stmt[0] == 'return':
                 has_return = True
-                
-        if not has_return:
+
+        if expected_ret_type != 'VOID' and not has_return:
             raise TypeError(f"Function '{func_name}' expects to return {expected_ret_type} but has no RETURN statement.")
-            
         return 'VOID'
 
     # --- RETURN STATEMENT ---
@@ -64,15 +67,17 @@ def check_statement(node, env):
         expr_node = node[1]
         type_expr = check_expression(expr_node, env)
         
-        if env['current_return'] is None:
+        if env.current_return is None:
             raise TypeError("RETURN is only allowed inside a function!")
+        
+        if env.current_return == 'VOID':
+            raise TypeError("Can't return a value from a VOID function!")
             
-        if type_expr != env['current_return']:
-            raise TypeError(f"Return type conflict: Expected {env['current_return']}, received {type_expr}")
+        if type_expr != env.current_return:
+            raise TypeError(f"Return type conflict: Expected {env.current_return}, received {type_expr}")
             
         return 'VOID'
 
-    # --- IF / WHILE STATEMENTS ---
     if kind in ['if_stmt', 'while_stmt']:
         cond_node, stmt_list = node[1], node[2]
         type_cond = check_expression(cond_node, env)
@@ -83,11 +88,9 @@ def check_statement(node, env):
             check_statement(stmt, env)
         return 'VOID'
 
-    # --- LOOP CONTROLS ---
     if kind in ['break', 'continue']:
         return 'VOID'
     
-    # --- FALLBACK ---
     check_expression(node, env)
     return 'VOID'
 
@@ -102,18 +105,20 @@ def check_expression(node, env):
     # --- VARIABLES ---
     if kind == 'id':
         var_name = node[1]
-        if var_name in env['vars']:
-            return env['vars'][var_name]
+        var_type = env.lookup_var(var_name)
+        if var_type:
+            return var_type
         raise TypeError(f"Variable '{var_name}' is not declared in this scope!")
 
     # --- FUNCTION CALL ---
     if kind == 'function_call':
         func_name, args = node[1], node[2]
         
-        if func_name not in env['funcs']:
+        func_info = env.lookup_func(func_name)
+        if not func_info:
             raise TypeError(f"Function '{func_name}' is not defined!")
-            
-        expected_param_types, return_type = env['funcs'][func_name]
+        
+        expected_param_types, return_type = func_info
         
         if len(args) != len(expected_param_types):
             raise TypeError(f"Function '{func_name}' expected {len(expected_param_types)} arguments, received {len(args)}")
@@ -169,9 +174,5 @@ def check_expression(node, env):
 
 def check_type(node, env=None):
     if env is None:
-        env = {
-            'vars': {},
-            'funcs': {},
-            'current_return': None
-        }
+        env = Env()
     return check_statement(node, env)
