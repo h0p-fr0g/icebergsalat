@@ -279,3 +279,63 @@ if __name__ == "__main__":
         assert runtime_env.vars['proof_and'] is False
         assert runtime_env.vars['proof_or'] is True
         print("-> 4. Short-Circuit Verification: Success! The interpreter successfully skipped the Division by Zero.")
+
+
+    # negative
+    code_wrong_assignment = '''
+        10 a int :=
+    '''
+
+    # negative
+    '''
+        20 b boolean =:
+    '''
+
+
+    # positive
+    '''
+
+        20~ b int =:
+    '''
+
+    # positive
+    '''
+        (x int)quad int LETTUCE\n\n\n
+        \tx x * return
+
+        (4) quad a int =:
+        
+    '''
+
+    #positive
+    '''
+    
+        (x int) outer int LETTUCE\n
+        \t 1 x + x =:
+        \t (y int) inner int LETTUCE\n
+        \t\t y x - return
+        \t inner return
+
+        (2)(5) outer z int =:
+        
+    '''
+
+    # negative
+    '''
+        (x int) outer int LETTUCE\n
+        \t 1 x + x =:
+        \t (y int) inner int LETTUCE\n
+        \t\t y x - return
+        \t inner return
+
+        (5) inner
+    '''
+
+    # negative
+    '''
+        (x int) outer int LETTUCE\n
+        \t T if\n
+        \t\t 5 return
+        \telse
+        \t\t 5 y int =:
+    '''
