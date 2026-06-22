@@ -55,8 +55,12 @@ def p_statement_reassign(p):
     p[0] = ('assign', p[2], p[1])
 
 def p_statement_if(p):
-    'statement : expression IF separator_list INDENT statement_list DEDENT'
-    p[0] = ('if_stmt', p[1], p[5])
+    '''statement : expression IF separator_list INDENT statement_list DEDENT
+                 | expression IF separator_list INDENT statement_list DEDENT separator_list ELSE separator_list INDENT statement_list DEDENT'''
+    if len(p) == 7:
+        p[0] = ('if_stmt', p[1], p[5])
+    else:
+        p[0] = ('if_else_stmt', p[1], p[5], p[11])
 
 def p_statement_while(p):
     'statement : expression WHILE separator_list INDENT statement_list DEDENT'
@@ -86,7 +90,9 @@ def p_empty(p):
     'empty :'
     p[0] = None
 
-
+def p_expression_negate(p):
+    'expression : expression TILDE'
+    p[0] = ('NEGATE', p[1])
 
 def p_expression_number(p):
     'expression : NUMBER'

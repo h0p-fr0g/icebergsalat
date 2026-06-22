@@ -32,7 +32,7 @@ def check_statement(node, env):
             raise TypeError(f"Typeconflict at assignment of '{var_name}': Can't save {type_expr} into {existing_type}")
         return 'VOID'
 
-    # --- FUNCTION DEFINITION ---
+# --- FUNCTION DEFINITION ---
     if kind == 'function_def':
         func_name, ret_type_str, params, body = node[1], node[2], node[3], node[4]
 
@@ -52,14 +52,13 @@ def check_statement(node, env):
         for (p_name, _), p_type in zip(params, param_types):
             local_env.vars[p_name] = p_type
 
-        has_return = False
         for stmt in body:
             check_statement(stmt, local_env)
-            if stmt[0] == 'return':
-                has_return = True
 
-        if expected_ret_type != 'VOID' and not has_return:
-            raise TypeError(f"Function '{func_name}' expects to return {expected_ret_type} but has no RETURN statement.")
+        if expected_ret_type != 'VOID':
+            if not has_guaranteed_return(body):
+                raise TypeError(f"Function '{func_name}' expects to return {expected_ret_type} but not all execution paths end with a RETURN statement.")
+                
         return 'VOID'
 
     # --- RETURN STATEMENT ---
@@ -88,6 +87,21 @@ def check_statement(node, env):
             check_statement(stmt, env)
         return 'VOID'
 
+    # --- IF-ELSE STATEMENT ---
+    if kind == 'if_else_stmt':
+        cond_type = check_expression(node[1], env)
+        
+        if cond_type != 'BOOL':
+            raise TypeError(f"Condition of 'if-else' expects BOOL, received {cond_type}")
+        
+        for stmt in node[2]:
+            check_type(stmt, env)
+            
+        for stmt in node[3]:
+            check_type(stmt, env)
+        
+        return
+
     if kind in ['break', 'continue']:
         return 'VOID'
     
@@ -109,6 +123,13 @@ def check_expression(node, env):
         if var_type:
             return var_type
         raise TypeError(f"Variable '{var_name}' is not declared in this scope!")
+    
+    # --- NEGATION ---
+    if kind == 'NEGATE':
+        type_expr = check_expression(node[1], env)
+        if type_expr != 'NUM':
+            raise TypeError(f"Negation '~' expects NUM, received {type_expr}")
+        return 'NUM'
 
     # --- FUNCTION CALL ---
     if kind == 'function_call':
@@ -176,3 +197,26 @@ def check_type(node, env=None):
     if env is None:
         env = Env()
     return check_statement(node, env)
+
+
+
+def has_guaranteed_return(stmts):
+    if not isinstance(stmts, list):
+        stmts = [stmts]
+        
+    for stmt in stmts:
+        if stmt is None: 
+            continue
+            
+        kind = stmt[0]
+        
+        if kind == 'return':
+            return True
+            
+        if kind == 'if_else_stmt':
+            then_block = stmt[2]
+            else_block = stmt[3]
+            if has_guaranteed_return(then_block) and has_guaranteed_return(else_block):
+                return True
+                
+    return False

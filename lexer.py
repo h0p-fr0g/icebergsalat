@@ -3,6 +3,7 @@ import ply.lex as lex
 
 tokens = (
     'ID', 'NUMBER', 'BOOLEAN',
+    'TILDE',
     'PLUS', 'MINUS', 'TIMES', 'DIVIDE',
     'LPAREN', 'RPAREN', 'COMMA',
     'MODULO', 'POWER', 'SH',
@@ -15,7 +16,7 @@ tokens = (
     'FUNCTION', 'RETURN'
 )
 
-
+t_TILDE   = r'~'
 t_PLUS    = r'\+'
 t_MINUS   = r'-'
 t_TIMES   = r'\*'
@@ -41,13 +42,13 @@ keywords = {
     'int': 'TYPE',
     'bool': 'TYPE',
     'void': 'TYPE',
-    'IF': 'IF',
-    'ELSE': 'ELSE',
-    'WHILE': 'WHILE',
+    'if': 'IF',
+    'else': 'ELSE',
+    'while': 'WHILE',
     'break': 'BREAK',
     'continue': 'CONTINUE',
     'LETTUCE': 'FUNCTION',
-    'RETURN': 'RETURN'
+    'return': 'RETURN'
 }
 
 
