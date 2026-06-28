@@ -4,7 +4,6 @@
 
 from environment import Env 
 
-
 class BreakException(Exception): pass
 class ContinueException(Exception): pass
 
@@ -25,14 +24,12 @@ def eval_statement(node, env):
         if kind == 'assign_decl':
             env.vars[var_name] = val
         else:
-            target_env = env
-            while target_env and var_name not in target_env.vars:
-                target_env = target_env.parent
+            target_env = env.resolve(var_name)
             
             if target_env:
                 target_env.vars[var_name] = val
             else:
-                env.vars[var_name] = val
+                raise NameError(f"Runtime Error: Variable '{var_name}' is not defined!")
         return None
 
     # --- IF STATEMENT ---
@@ -49,12 +46,12 @@ def eval_statement(node, env):
         
         if cond_val:
             for stmt in node[2]:
-                eval_ast(stmt, env)
+                eval_statement(stmt, env)
         else:
             for stmt in node[3]:
-                eval_ast(stmt, env)
+                eval_statement(stmt, env)
                 
-        return
+        return None
 
     # --- WHILE STATEMENT ---
     if kind == 'while_stmt':
@@ -76,10 +73,10 @@ def eval_statement(node, env):
 
     # --- FUNCTION DEFINITION (CLOSURE) ---
     if kind == 'function_def':
-        func_name, ret_type, params, body = node[1], node[2], node[3], node[4]
+        func_name, _, params, body = node[1], node[2], node[3], node[4]
         param_names = [p_name for p_name, _ in params]
         
-        env.funcs[func_name] = (param_names, body, env)
+        env.vars[func_name] = (param_names, body, env)
         return None
 
     # --- RETURN STATEMENT ---
@@ -103,15 +100,22 @@ def eval_expression(node, env):
     if kind == 'num':    return node[1]
     if kind == 'bool':   return node[1]
 
-    # --- VARIABLES ---
+    # --- VARIABLES (AND FUNCTIONS) ---
     if kind == 'id':
         var_name = node[1]
-        val = env.lookup_var(var_name)
+        val = env.lookup(var_name)
         if val is not None:
             return val
         raise NameError(f"Runtime Error: Variable '{var_name}' is not defined!")
 
-    # --- NEGAGTION ---
+    # --- LAMBDA EXPRESSION (NEU) ---
+    if kind == 'lambda':
+        params, _, body = node[1], node[2], node[3]
+        param_names = [p_name for p_name, _ in params]
+        
+        return (param_names, body, env)
+
+    # --- NEGATION ---
     if kind == 'NEGATE':
         return -eval_expression(node[1], env)
 
@@ -129,9 +133,9 @@ def eval_expression(node, env):
         op, left, right = node[1], node[2], node[3]
 
         if op == 'AND':
-                if not eval_expression(left, env): 
-                    return False
-                return eval_expression(right, env)
+            if not eval_expression(left, env): 
+                return False
+            return eval_expression(right, env)
                 
         if op == 'OR':
             if eval_expression(left, env): 
@@ -157,13 +161,19 @@ def eval_expression(node, env):
 
     # --- FUNCTION CALL ---
     if kind == 'function_call':
-        func_name, args = node[1], node[2]
+        target_node, args = node[1], node[2]
         
-        func_info = env.lookup_func(func_name)
-        if not func_info:
-            raise NameError(f"Runtime Error: Function '{func_name}' is not defined!")
+        if isinstance(target_node, str):
+            func_obj = env.lookup(target_node)
+            if not func_obj:
+                raise NameError(f"Runtime Error: '{target_node}' is not defined!")
+        else:
+            func_obj = eval_expression(target_node, env)
             
-        param_names, body, closure_env = func_info
+        if not isinstance(func_obj, tuple) or len(func_obj) != 3:
+            raise TypeError("Runtime Error: Target is not a callable function!")
+            
+        param_names, body, closure_env = func_obj
         
         evaluated_args = [eval_expression(arg, env) for arg in args]
         

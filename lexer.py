@@ -13,7 +13,9 @@ tokens = (
     'IF', 'ELSE', 'WHILE', 'BREAK', 'CONTINUE',
     'TYPE', 
     'LINEBREAK', 'INDENT', 'DEDENT',
-    'FUNCTION', 'RETURN'
+    'FUNCTION', 'RETURN',
+    'BACKSLASH','COLON',
+    'LEAF'
 )
 
 t_TILDE   = r'~'
@@ -37,17 +39,21 @@ t_AND     = r'&'
 t_OR      = r'\|'
 t_NOT     = r'!'
 t_ASSIGN  = r'=:'
+t_BACKSLASH = r'\\'
+t_COLON = r':'
 
 keywords = {
     'int': 'TYPE',
     'bool': 'TYPE',
     'void': 'TYPE',
+    'func': 'TYPE',
     'if': 'IF',
     'else': 'ELSE',
     'while': 'WHILE',
     'break': 'BREAK',
     'continue': 'CONTINUE',
     'LETTUCE': 'FUNCTION',
+    'LEAF': 'LEAF',
     'return': 'RETURN'
 }
 

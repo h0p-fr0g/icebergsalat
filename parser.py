@@ -47,7 +47,7 @@ def p_statement_exp(p):
     p[0] = p[1]
 
 def p_statement_assign(p):
-    'statement : expression ID TYPE ASSIGN'
+    'statement : expression ID type ASSIGN'
     p[0] = ('assign_decl', p[2], p[3], p[1])
 
 def p_statement_reassign(p):
@@ -75,8 +75,8 @@ def p_statement_continue(p):
     p[0] = ('continue',)
 
 def p_function_definition(p):
-    '''statement : LPAREN parameterlist RPAREN ID TYPE FUNCTION separator_list INDENT statement_list DEDENT
-                 | LPAREN RPAREN ID TYPE FUNCTION separator_list INDENT statement_list DEDENT'''
+    '''statement : LPAREN parameterlist RPAREN ID type FUNCTION separator_list INDENT statement_list DEDENT
+                 | LPAREN RPAREN ID type FUNCTION separator_list INDENT statement_list DEDENT'''
     if len(p) == 11:
         p[0] = ('function_def', p[4], p[5], p[2], p[9])
     else:
@@ -106,13 +106,21 @@ def p_expression_id(p):
     'expression : ID'
     p[0] = ('id', p[1])
 
-def p_function_call(p):
-    '''expression : LPAREN expressionlist RPAREN ID
-                  | LPAREN RPAREN ID'''
+
+def p_function_call_expr(p):
+    '''function_call : LPAREN expressionlist RPAREN ID
+                     | LPAREN RPAREN ID
+                     | LPAREN expressionlist RPAREN function_call
+                     | LPAREN RPAREN function_call'''
     if len(p) == 5:
         p[0] = ('function_call', p[4], p[2])
     else:
         p[0] = ('function_call', p[3], [])
+
+def p_expression_function_call(p):
+    'expression : function_call'
+    p[0] = p[1]
+
 
 def binop(op):
     production = f'expression : expression expression {op}'
@@ -147,12 +155,34 @@ def p_expressionlist(p):
         p[0] = [p[1]]
 
 def p_parameterlist(p):
-    '''parameterlist : ID TYPE COMMA parameterlist
-                     | ID TYPE'''
+    '''parameterlist : ID type COMMA parameterlist
+                     | ID type'''
     if len(p) == 5:
         p[0] = [(p[1], p[2])] + p[4]
     else:
         p[0] = [(p[1], p[2])]
+
+
+def p_type_simple(p):
+    'type : TYPE'
+    p[0] = p[1]
+
+def p_type_function(p):
+    'type : BACKSLASH typelist COLON type'
+    p[0] = ('func_type', p[2], p[4])
+
+def p_typelist(p):
+    '''typelist : type typelist
+                | type'''
+    if len(p) == 3:
+        p[0] = [p[1]] + p[2]
+    else:
+        p[0] = [p[1]]
+
+
+def p_expression_lambda(p):
+    'expression : LPAREN parameterlist RPAREN type LEAF separator_list INDENT statement_list DEDENT'
+    p[0] = ('lambda', p[2], p[4], p[8])
 
 
 def p_error(p):

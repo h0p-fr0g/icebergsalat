@@ -1,20 +1,18 @@
 class Env:
     def __init__(self, parent=None):
         self.vars = {}
-        self.funcs = {}
         self.parent = parent
         self.current_return = parent.current_return if parent else None
 
-    def lookup_var(self, name):
+    def resolve(self, name):
         if name in self.vars:
-            return self.vars[name]
+            return self
         if self.parent:
-            return self.parent.lookup_var(name)
+            return self.parent.resolve(name)
         return None
 
-    def lookup_func(self, name):
-        if name in self.funcs:
-            return self.funcs[name]
-        if self.parent:
-            return self.parent.lookup_func(name)
+    def lookup(self, name):
+        target_env = self.resolve(name)
+        if target_env:
+            return target_env.vars[name]
         return None

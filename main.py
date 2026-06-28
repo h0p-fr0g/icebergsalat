@@ -320,7 +320,7 @@ if __name__ == "__main__":
 
     # --- TEST 26: POSITIV - Nested Functions / Closures ---
     code_nested_func = '''
-(x int) outer int LETTUCE
+(x int) outer \ int : int LETTUCE
 \t1 x + x =:
 \t(y int) inner int LETTUCE
 \t\ty x - return
@@ -336,7 +336,7 @@ if __name__ == "__main__":
 
     # --- TEST 27: NEGATIV - Scope Error (Calling inner function globally) ---
     code_scope_error = '''
-(x int) outer int LETTUCE
+(x int) outer \ int : int LETTUCE
 \t1 x + x =:
 \t(y int) inner int LETTUCE
 \t\ty x - return
